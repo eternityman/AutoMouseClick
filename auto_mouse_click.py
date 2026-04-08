@@ -7,7 +7,6 @@ global hotkey toggling.
 
 import logging
 import threading
-import time
 import tkinter as tk
 from tkinter import messagebox, ttk
 
@@ -15,6 +14,9 @@ from pynput.keyboard import GlobalHotKeys
 from pynput.mouse import Button, Controller
 
 logger = logging.getLogger(__name__)
+
+# Minimum click interval to protect against system overload (seconds)
+_MIN_INTERVAL = 0.001
 
 
 class AutoMouseClick:
@@ -36,6 +38,7 @@ class AutoMouseClick:
         self.click_thread = None
         self.hotkey_listener = None
         self._lock = threading.Lock()
+        self._stop_event = threading.Event()
 
         # Settings
         self.frequency = 5  # clicks per second
@@ -280,7 +283,10 @@ class AutoMouseClick:
     def _start_clicking(self):
         """Start the auto-click thread."""
         # Validate background mode has a position set
-        if self.background_mode and self.background_position is None:
+        with self._lock:
+            bg_mode = self.background_mode
+            bg_pos = self.background_position
+        if bg_mode and bg_pos is None:
             messagebox.showwarning(
                 "未设置位置",
                 "后台模式已开启，但尚未设置点击位置。\n"
@@ -289,23 +295,42 @@ class AutoMouseClick:
             return
 
         self.clicking = True
+        self._stop_event.clear()
         self.status_var.set("运行中")
         self.status_label.config(foreground="green")
         self.toggle_btn.config(text="停止自动点击")
+
+        # In non-background mode, minimize the window so the auto-clicker
+        # does not click on the application's own buttons (self-click freeze).
+        if not bg_mode:
+            self.root.iconify()
+
         self.click_thread = threading.Thread(target=self._click_loop, daemon=True)
         self.click_thread.start()
 
     def _stop_clicking(self):
-        """Stop the auto-click thread."""
+        """Stop the auto-click thread and wait for it to finish."""
         self.clicking = False
+        self._stop_event.set()  # wake the thread immediately
+
+        # Wait for the click thread to finish so it is not mid-click when
+        # we update the UI or destroy the window.
+        if self.click_thread is not None and self.click_thread.is_alive():
+            self.click_thread.join(timeout=2)
+        self.click_thread = None
+
         self.status_var.set("已停止")
         self.status_label.config(foreground="red")
         self.toggle_btn.config(text="开启自动点击")
 
+        # Restore the window if it was minimized during non-bg clicking.
+        self.root.deiconify()
+
     def _click_loop(self):
         """Worker loop that performs mouse clicks at the configured frequency."""
         while self.clicking:
-            interval = 1.0 / self.frequency
+            freq = self.frequency
+            interval = max(1.0 / freq, _MIN_INTERVAL) if freq > 0 else 1.0
             with self._lock:
                 bg_mode = self.background_mode
                 bg_pos = self.background_position
@@ -318,7 +343,9 @@ class AutoMouseClick:
             else:
                 # Click at current cursor position
                 self.mouse.click(Button.left)
-            time.sleep(interval)
+            # Use Event.wait so _stop_clicking can cancel instantly
+            if self._stop_event.wait(timeout=interval):
+                break
 
     # ── Hotkey management ───────────────────────────────────────────
 
