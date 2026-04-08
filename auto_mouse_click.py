@@ -49,6 +49,10 @@ class AutoMouseClick:
         self.hotkey_combo = self.DEFAULT_HOTKEY
         self.hotkey_display = self.DEFAULT_HOTKEY_DISPLAY
 
+        # Hotkey recording state
+        self._recording_keys = set()
+        self._recording_key_names = []
+
         self._build_ui()
         self._start_hotkey_listener()
 
@@ -281,7 +285,12 @@ class AutoMouseClick:
             self._start_clicking()
 
     def _start_clicking(self):
-        """Start the auto-click thread."""
+        """Start the auto-click thread.
+
+        In non-background mode the application window is minimized to prevent
+        the auto-clicker from clicking on its own UI elements.  The window is
+        restored automatically when clicking stops.
+        """
         # Validate background mode has a position set
         with self._lock:
             bg_mode = self.background_mode
@@ -327,10 +336,20 @@ class AutoMouseClick:
         self.root.deiconify()
 
     def _click_loop(self):
-        """Worker loop that performs mouse clicks at the configured frequency."""
+        """Worker loop that performs mouse clicks at the configured frequency.
+
+        Reads ``self.frequency`` each iteration so runtime changes take effect
+        immediately.  If the frequency is somehow zero or negative the loop
+        waits 1 second and re-checks rather than performing clicks.
+        """
         while self.clicking:
             freq = self.frequency
-            interval = max(1.0 / freq, _MIN_INTERVAL) if freq > 0 else 1.0
+            if freq <= 0:
+                # Invalid frequency — wait and re-check rather than clicking.
+                if self._stop_event.wait(timeout=1.0):
+                    break
+                continue
+            interval = max(1.0 / freq, _MIN_INTERVAL)
             with self._lock:
                 bg_mode = self.background_mode
                 bg_pos = self.background_position
