@@ -101,9 +101,10 @@ class AutoMouseClick:
         custom_inner = ttk.Frame(freq_frame)
         custom_inner.grid(row=1, column=1, sticky="w", padx=(5, 0), pady=(5, 0))
 
-        self.custom_entry = ttk.Entry(custom_inner, width=8, state="disabled")
+        self.custom_entry = ttk.Entry(custom_inner, width=8)
         self.custom_entry.grid(row=0, column=0)
         self.custom_entry.insert(0, "5")
+        self.custom_entry.config(state="disabled")
         ttk.Label(custom_inner, text="次/秒").grid(row=0, column=1, padx=(3, 0))
         self.custom_apply_btn = ttk.Button(
             custom_inner,
@@ -342,6 +343,20 @@ class AutoMouseClick:
         immediately.  If the frequency is somehow zero or negative the loop
         waits 1 second and re-checks rather than performing clicks.
         """
+        try:
+            self._click_loop_inner()
+        except Exception:
+            logger.exception("Unexpected error in click loop")
+            # Schedule UI reset on the main thread so the user sees "已停止"
+            # instead of a stuck "运行中" status.
+            self.clicking = False
+            try:
+                self.root.after(0, self._stop_clicking)
+            except Exception:
+                pass  # root may already be destroyed
+
+    def _click_loop_inner(self):
+        """Inner click loop separated for clean exception handling."""
         while self.clicking:
             freq = self.frequency
             if freq <= 0:

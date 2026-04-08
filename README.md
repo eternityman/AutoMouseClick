@@ -27,7 +27,18 @@ pip install -r requirements.txt
 python auto_mouse_click.py
 ```
 
-## 打包为 .exe
+## 下载 .exe
+
+最简单的方式是直接下载预编译的 `.exe` 文件，无需安装 Python：
+
+1. 前往本项目的 [GitHub Actions](../../actions/workflows/build-exe.yml) 页面
+2. 点击最新的成功运行记录
+3. 在 **Artifacts** 区域下载 `AutoMouseClick-Windows`
+4. 解压后双击 `AutoMouseClick.exe` 即可运行
+
+> 发布正式版本时（打 tag），`.exe` 也会自动发布到 [Releases](../../releases) 页面。
+
+## 打包为 .exe（本地构建）
 
 在 **Windows** 系统上执行以下步骤，生成可直接运行的 `.exe` 文件：
 
@@ -62,9 +73,11 @@ pyinstaller AutoMouseClick.spec --noconfirm
 
 ```
 AutoMouseClick/
-├── auto_mouse_click.py   # 主应用程序
-├── AutoMouseClick.spec   # PyInstaller 打包配置
-├── build_exe.bat         # Windows 一键打包脚本
-├── requirements.txt      # Python 依赖
-└── README.md             # 项目说明
+├── .github/workflows/
+│   └── build-exe.yml        # GitHub Actions — 自动构建 .exe
+├── auto_mouse_click.py      # 主应用程序
+├── AutoMouseClick.spec      # PyInstaller 打包配置
+├── build_exe.bat            # Windows 本地一键打包脚本
+├── requirements.txt         # Python 依赖
+└── README.md                # 项目说明
 ```
