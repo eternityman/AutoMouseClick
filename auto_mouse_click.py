@@ -55,6 +55,11 @@ class AutoMouseClick:
     MUTED = "#95a5a6"
     BG_COLOR = "#ecf0f1"
 
+    # Animation constants for the pulsing status dot
+    _PULSE_SPEED = 0.15       # radians per frame (higher = faster pulse)
+    _PULSE_GREEN_MIN = 130    # minimum green channel value
+    _PULSE_GREEN_RANGE = 125  # green channel oscillation range
+
     def __init__(self):
         self.mouse = Controller()
         self.clicking = False
@@ -450,8 +455,8 @@ class AutoMouseClick:
             return
         self._pulse_step += 1
         # Smooth sine-wave pulse between darker and brighter green
-        t = math.sin(self._pulse_step * 0.15) * 0.5 + 0.5
-        g = int(130 + t * 125)  # green channel: 130–255
+        t = math.sin(self._pulse_step * self._PULSE_SPEED) * 0.5 + 0.5
+        g = int(self._PULSE_GREEN_MIN + t * self._PULSE_GREEN_RANGE)
         color = f"#00{g:02x}40"
         self.status_canvas.itemconfig(self.status_dot, fill=color)
         self._animation_after_id = self.root.after(50, self._animate_status)
@@ -554,12 +559,14 @@ class AutoMouseClick:
         pt = ctypes.wintypes.POINT()
         ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
 
-        # Screen size for absolute coordinate conversion
+        # Screen size for absolute coordinate conversion.
+        # MOUSEEVENTF_ABSOLUTE uses a 0–65535 coordinate space.
+        _ABS_COORD_SCALE = 65536
         scr_w = ctypes.windll.user32.GetSystemMetrics(0)
         scr_h = ctypes.windll.user32.GetSystemMetrics(1)
 
         def _to_abs(val, size):
-            return int(val * 65536 / size)
+            return int(val * _ABS_COORD_SCALE / size)
 
         tgt_x = _to_abs(x, scr_w)
         tgt_y = _to_abs(y, scr_h)
@@ -632,7 +639,9 @@ class AutoMouseClick:
         if isinstance(key, KeyCode):
             if key.char is not None:
                 return key.char.lower()
-            # Virtual key codes 65–90 correspond to A–Z
+            # When modifier keys are held (e.g. Alt), key.char may be None.
+            # Fall back to virtual key codes: 65–90 map to A–Z on all
+            # platforms that pynput supports (Windows, macOS, Linux/X11).
             if key.vk is not None and 65 <= key.vk <= 90:
                 return chr(key.vk).lower()
         return None
