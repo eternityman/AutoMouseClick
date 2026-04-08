@@ -5,6 +5,7 @@ clicking at configurable frequencies, with support for background mode and
 global hotkey toggling.
 """
 
+import logging
 import threading
 import time
 import tkinter as tk
@@ -12,6 +13,8 @@ from tkinter import messagebox, ttk
 
 from pynput.keyboard import GlobalHotKeys
 from pynput.mouse import Button, Controller
+
+logger = logging.getLogger(__name__)
 
 
 class AutoMouseClick:
@@ -32,6 +35,7 @@ class AutoMouseClick:
         self.clicking = False
         self.click_thread = None
         self.hotkey_listener = None
+        self._lock = threading.Lock()
 
         # Settings
         self.frequency = 5  # clicks per second
@@ -217,11 +221,14 @@ class AutoMouseClick:
 
     def _on_bg_toggle(self):
         """Handle background mode checkbox toggle (real-time effect)."""
-        self.background_mode = self.bg_var.get()
-        if self.background_mode:
+        with self._lock:
+            self.background_mode = self.bg_var.get()
+            bg_mode = self.background_mode
+            bg_pos = self.background_position
+        if bg_mode:
             self.bg_pos_btn.config(state="normal")
-            if self.background_position:
-                x, y = self.background_position
+            if bg_pos:
+                x, y = bg_pos
                 self.bg_status_label.config(
                     text=f"后台模式开启 — 点击位置: ({x}, {y})",
                     foreground="green",
@@ -253,7 +260,8 @@ class AutoMouseClick:
             self.root.after(1000, self._countdown, remaining - 1)
         else:
             pos = self.mouse.position
-            self.background_position = pos
+            with self._lock:
+                self.background_position = pos
             self.bg_status_label.config(
                 text=f"后台模式开启 — 点击位置: ({pos[0]}, {pos[1]})",
                 foreground="green",
@@ -298,10 +306,13 @@ class AutoMouseClick:
         """Worker loop that performs mouse clicks at the configured frequency."""
         while self.clicking:
             interval = 1.0 / self.frequency
-            if self.background_mode and self.background_position:
+            with self._lock:
+                bg_mode = self.background_mode
+                bg_pos = self.background_position
+            if bg_mode and bg_pos:
                 # Save current position, move, click, restore
                 original_pos = self.mouse.position
-                self.mouse.position = self.background_position
+                self.mouse.position = bg_pos
                 self.mouse.click(Button.left)
                 self.mouse.position = original_pos
             else:
@@ -320,9 +331,8 @@ class AutoMouseClick:
             )
             self.hotkey_listener.daemon = True
             self.hotkey_listener.start()
-        except Exception:
-            # If the hotkey is invalid, silently ignore
-            pass
+        except (ValueError, KeyError, TypeError) as exc:
+            logger.warning("Failed to register hotkey '%s': %s", self.hotkey_combo, exc)
 
     def _stop_hotkey_listener(self):
         """Stop the current global hotkey listener if active."""
