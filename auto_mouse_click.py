@@ -346,7 +346,11 @@ class AutoMouseClick:
         try:
             self._click_loop_inner()
         except Exception:
-            logger.exception("Unexpected error in click loop")
+            logger.exception(
+                "Unexpected error in click loop (freq=%s, bg_mode=%s)",
+                self.frequency,
+                self.background_mode,
+            )
             # Schedule UI reset on the main thread so the user sees "已停止"
             # instead of a stuck "运行中" status.
             self.clicking = False
